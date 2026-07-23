@@ -31,7 +31,7 @@ jobs:
           coverage: xdebug
       - name: Install Composer dependencies
         run: |
-           composer update --no-interaction --prefer-source
+           composer update --no-interaction --prefer-dist
       - name: Run Tests
         run: composer run test -- --coverage-text
         env:
