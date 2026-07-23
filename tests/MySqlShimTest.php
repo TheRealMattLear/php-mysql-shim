@@ -9,7 +9,41 @@
  */
 namespace Dshafik\MySQL\Tests;
 
-class MySqlShimTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
+if (method_exists('\Yoast\PHPUnitPolyfills\TestCases\TestCase', 'expectWarning')) {
+    abstract class CompatibleTestCase extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
+    {
+    }
+} else {
+    abstract class CompatibleTestCase extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
+    {
+        public function expectWarning()
+        {
+            $this->expectException('PHPUnit\Framework\Error\Warning');
+        }
+
+        public function expectWarningMessage($message)
+        {
+            $this->expectExceptionMessage($message);
+        }
+
+        public function expectWarningMessageMatches($regularExpression)
+        {
+            $this->expectExceptionMessageRegExp($regularExpression);
+        }
+
+        public function expectNotice()
+        {
+            $this->expectException('PHPUnit\Framework\Error\Notice');
+        }
+
+        public function expectNoticeMessage($message)
+        {
+            $this->expectExceptionMessage($message);
+        }
+    }
+}
+
+class MySqlShimTest extends CompatibleTestCase
 {
     /**
      * @var string MySQL Host
