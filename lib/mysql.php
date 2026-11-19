@@ -647,6 +647,12 @@ namespace {
 
         function mysql_ping(mysqli $link = null)
         {
+            // Reconnection was removed in PHP 8.2; mysqli_ping is deprecated
+            // in PHP 8.4. STAT checks the connection without that deprecation.
+            if (PHP_VERSION_ID >= 80200) {
+                return @mysqli_stat(MySQL::getConnection($link)) !== false;
+            }
+
             return @mysqli_ping(MySQL::getConnection($link));
         }
 

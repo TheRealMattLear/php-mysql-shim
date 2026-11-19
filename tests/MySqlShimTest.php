@@ -910,6 +910,23 @@ class MySqlShimTest extends CompatibleTestCase
         $this->assertEquals(1, mysql_result($result, 0, 'testing.one'));
     }
 
+    public function test_mysql_ping()
+    {
+        $link = mysqli_connect(static::$host, static::$username, static::$password);
+        $control = mysqli_connect(static::$host, static::$username, static::$password);
+        $this->assertInstanceOf(\mysqli::class, $link);
+        $this->assertInstanceOf(\mysqli::class, $control);
+
+        try {
+            $this->assertTrue(mysql_ping($link));
+            $this->assertTrue(mysqli_query($control, 'KILL CONNECTION ' . (int) mysqli_thread_id($link)));
+            $this->assertFalse(mysql_ping($link));
+        } finally {
+            @mysqli_close($link);
+            mysqli_close($control);
+        }
+    }
+
     public function test_mysql_close()
     {
         mysql_connect(static::$host, static::$username, static::$password);
