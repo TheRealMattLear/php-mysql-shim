@@ -1,15 +1,49 @@
 <?php
 /**
- * php7-mysql-shim
+ * php-mysql-shim
  *
  * @author Davey Shafik <me@daveyshafik.com>
  * @copyright Copyright (c) 2017 Davey Shafik
  * @license MIT License
- * @link https://github.com/dshafik/php7-mysql-shim
+ * @link https://github.com/TheRealMattLear/php-mysql-shim
  */
 namespace Dshafik\MySQL\Tests;
 
-class MySqlShimTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
+if (method_exists('\Yoast\PHPUnitPolyfills\TestCases\TestCase', 'expectWarning')) {
+    abstract class CompatibleTestCase extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
+    {
+    }
+} else {
+    abstract class CompatibleTestCase extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
+    {
+        public function expectWarning()
+        {
+            $this->expectException('PHPUnit\Framework\Error\Warning');
+        }
+
+        public function expectWarningMessage($message)
+        {
+            $this->expectExceptionMessage($message);
+        }
+
+        public function expectWarningMessageMatches($regularExpression)
+        {
+            $this->expectExceptionMessageRegExp($regularExpression);
+        }
+
+        public function expectNotice()
+        {
+            $this->expectException('PHPUnit\Framework\Error\Notice');
+        }
+
+        public function expectNoticeMessage($message)
+        {
+            $this->expectExceptionMessage($message);
+        }
+    }
+}
+
+class MySqlShimTest extends CompatibleTestCase
 {
     /**
      * @var string MySQL Host
@@ -49,6 +83,7 @@ class MySqlShimTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
     {
         $mysql = mysql_connect(static::$host, static::$username, static::$password);
         $this->assertConnection($mysql);
+        $this->assertFalse(isset($mysql->hash));
     }
 
     /**
@@ -1043,6 +1078,9 @@ class MySqlShimTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
             $this->assertInstanceOf(\stdClass::class, $field);
 
             foreach ($values as $key => $value) {
+                if ($key === 'max_length' && version_compare(PHP_VERSION, '8.1.0', '>=')) {
+                    $value = 0;
+                }
                 $this->assertEquals($field->{$key}, $value, "Field '$index:$key' doesn't match.  Expected: $value, Actual: {$field->{$key}}");
             }
         }
@@ -1098,6 +1136,9 @@ class MySqlShimTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
             $this->assertInstanceOf(\stdClass::class, $field);
 
             foreach ($values as $key => $value) {
+                if ($key === 'max_length' && version_compare(PHP_VERSION, '8.1.0', '>=')) {
+                    $value = 0;
+                }
                 $this->assertEquals($field->{$key}, $value, "Field '$index:$key' doesn't match.  Expected: $value, Actual: {$field->{$key}}");
             }
         }
@@ -1186,6 +1227,9 @@ class MySqlShimTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
             $this->assertInstanceOf(\stdClass::class, $field);
 
             foreach ($values as $key => $value) {
+                if ($key === 'max_length' && version_compare(PHP_VERSION, '8.1.0', '>=')) {
+                    $value = 0;
+                }
                 $this->assertEquals($field->{$key}, $value, "Field '$index:$key' doesn't match.  Expected: $value, Actual: {$field->{$key}}");
             }
         }
@@ -1333,6 +1377,11 @@ class MySqlShimTest extends \Yoast\PHPUnitPolyfills\TestCases\TestCase
         return array(
             array(
                 'class' => null,
+                'params' => array(),
+                'expectedParams' => null,
+            ),
+            array(
+                'class' => '\stdClass',
                 'params' => array(),
                 'expectedParams' => null,
             ),

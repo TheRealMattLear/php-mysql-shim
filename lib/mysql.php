@@ -1,16 +1,16 @@
 <?php
 
 /**
- * php7-mysql-shim
+ * php-mysql-shim
  *
  * @author Davey Shafik <me@daveyshafik.com>
  * @copyright Copyright (c) 2017 Davey Shafik
  * @license MIT License
- * @link https://github.com/dshafik/php7-mysql-shim
+ * @link https://github.com/TheRealMattLear/php-mysql-shim
  */
 
 /**
- * A drop-in replacement for ext/mysql in PHP 7+ using ext/mysqli instead
+ * A drop-in replacement for ext/mysql in PHP 7 and 8 using ext/mysqli instead
  *
  * This library is meant to be a _stop-gap_. It will be slower than using
  * the native functions directly.
@@ -24,8 +24,11 @@ namespace {
 
     if (!extension_loaded('mysql')) {
         if (!extension_loaded('mysqli')) {
-            trigger_error('php7-mysql-shim: ext/mysqli is required', E_USER_ERROR);
+            trigger_error('php-mysql-shim: ext/mysqli is required', E_USER_ERROR);
         }
+
+        // ext/mysql reported warnings and returned false instead of throwing exceptions.
+        mysqli_report(MYSQLI_REPORT_OFF);
 
         define('MYSQL_ASSOC', 1);
         define('MYSQL_NUM', 2);
@@ -87,7 +90,7 @@ namespace {
                     return false;
                 }
                 MySQL::$last_connection = $conn;
-                $conn->hash = $hash; // @phpstan-ignore-line
+                MySQL::trackConnection($conn, $hash);
                 MySQL::$connections[$hash] = array('refcount' => 1, 'conn' => $conn);
 
                 return $conn;
@@ -115,11 +118,12 @@ namespace {
                 }
                 // @codeCoverageIgnoreEnd
 
-                $conn->hash = $hash; // @phpstan-ignore-line
+                MySQL::trackConnection($conn, $hash);
                 MySQL::$connections[$hash] = array('refcount' => 1, 'conn' => $conn);
 
                 return $conn;
             } catch (Throwable $e) {
+                MySQL::$last_connection = null;
                 trigger_error($e->getMessage(), E_USER_WARNING);
                 // @codeCoverageIgnoreStart
                 // PHPUnit turns the warning into an exception, so this never runs
@@ -143,21 +147,25 @@ namespace {
             $isDefault = ($link === null);
 
             $link = MySQL::getConnection($link, __FUNCTION__);
-            if ($link === null) {
+            if (!($link instanceof mysqli)) {
                 // @codeCoverageIgnoreStart
                 // PHPUnit Warning -> Exception
                 return false;
                 // @codeCoverageIgnoreEnd
             }
 
-            if (isset(MySQL::$connections[$link->hash])) {
-                MySQL::$connections[$link->hash]['refcount'] -= 1;
+            $hash = MySQL::getConnectionHash($link);
+            if (isset(MySQL::$connections[$hash])) {
+                MySQL::$connections[$hash]['refcount'] -= 1;
             }
 
             $return = true;
-            if (MySQL::$connections[$link->hash]['refcount'] === 0) {
+            if (isset(MySQL::$connections[$hash]) && MySQL::$connections[$hash]['refcount'] === 0) {
                 $return = mysqli_close($link);
-                unset(MySQL::$connections[$link->hash]);
+                unset(MySQL::$connections[$hash]);
+                MySQL::forgetConnection($link);
+            } elseif ($hash === null) {
+                $return = mysqli_close($link);
             }
 
             if ($isDefault) {
@@ -225,10 +233,9 @@ namespace {
                 mysqli_real_escape_string($link, $tableName)
             );
 
-            $result = mysqli_query($link, $query);
+            $result = mysql_query($query, $link);
 
             if ($result instanceof mysqli_result) {
-                $result->table = $tableName; // @phpstan-ignore-line
                 return $result;
             }
 
@@ -286,7 +293,7 @@ namespace {
             }
 
             $found = true;
-            if (strpos($field, '.') !== false) {
+            if (is_string($field) && strpos($field, '.') !== false) {
                 list($table, $name) = explode('.', $field);
                 $i = 0;
                 $found = false;
@@ -329,7 +336,11 @@ namespace {
             }
 
             $previous = error_reporting(0);
-            $rows = mysqli_num_rows($result);
+            try {
+                $rows = mysqli_num_rows($result);
+            } catch (Throwable $e) {
+                $rows = 0;
+            }
             error_reporting($previous);
 
             return $rows;
@@ -386,6 +397,8 @@ namespace {
 
             if ($class === null) {
                 $object = mysqli_fetch_object($result);
+            } elseif (!method_exists($class, '__construct')) {
+                $object = mysqli_fetch_object($result, $class);
             } else {
                 $object = mysqli_fetch_object($result, $class, $params);
             }
@@ -415,36 +428,21 @@ namespace {
 
         function mysql_fetch_field($result, $field_offset = null) /* : object|*/
         {
-            static $fields = array();
-
             if (!MySQL::checkValidResult($result, __FUNCTION__)) {
                 // @codeCoverageIgnoreStart
                 return false;
                 // @codeCoverageIgnoreEnd
             }
 
-            $result_hash = spl_object_hash($result);
             if ($field_offset === null) {
-                $fields[$result_hash][] = true;
                 $res = mysqli_fetch_field($result);
-            } elseif ($field_offset > mysqli_num_fields($result)) {
+            } elseif ($field_offset >= mysqli_num_fields($result)) {
                 trigger_error('mysql_fetch_field(): Bad field offset', E_USER_WARNING);
                 return false;
             } else {
-                $i = 0;
-                if (isset($fields[$result_hash])) {
-                    $i = count($fields[$result_hash]);
-                }
-
-                while ($i <= $field_offset) {
-                    $res = mysqli_fetch_field($result);
-
-                    if ($res === false) {
-                        return false;
-                    }
-
-                    $fields[$result_hash][$i] = true;
-                    $i++;
+                $res = mysqli_fetch_field_direct($result, $field_offset);
+                if ($field_offset + 1 < mysqli_num_fields($result)) {
+                    mysqli_field_seek($result, $field_offset + 1);
                 }
             }
 
@@ -649,7 +647,7 @@ namespace {
 
         function mysql_ping(mysqli $link = null)
         {
-            return mysqli_ping(MySQL::getConnection($link));
+            return @mysqli_ping(MySQL::getConnection($link));
         }
 
         function mysql_get_client_info(mysqli $link = null)
@@ -782,13 +780,33 @@ namespace {
 
 namespace Dshafik {
 
-    use Exception;
     use mysqli_result;
+    use Throwable;
 
     class MySQL
     {
         public static $last_connection;
         public static $connections = array();
+        public static $connection_hashes = array();
+
+        public static function trackConnection($link, $hash)
+        {
+            static::$connection_hashes[spl_object_hash($link)] = $hash;
+        }
+
+        public static function getConnectionHash($link)
+        {
+            $objectHash = spl_object_hash($link);
+
+            return isset(static::$connection_hashes[$objectHash])
+                ? static::$connection_hashes[$objectHash]
+                : null;
+        }
+
+        public static function forgetConnection($link)
+        {
+            unset(static::$connection_hashes[spl_object_hash($link)]);
+        }
 
         public static function getConnection($link = null, $func = null)
         {
@@ -816,7 +834,7 @@ namespace Dshafik {
                 if ($field === false) {
                     return false;
                 }
-            } catch (Exception $e) {
+            } catch (Throwable $e) {
                 trigger_error(
                     sprintf(
                         'mysql_field_%s(): Field %d is invalid for MySQL result index %s',

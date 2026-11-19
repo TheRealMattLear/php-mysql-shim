@@ -1,13 +1,12 @@
-[![Build Status](https://github.com/dshafik/php7-mysql-shim/workflows/Unit%20Tests/badge.svg)](https://github.com/dshafik/php7-mysql-shim/actions)
-![Code Coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/dshafik/ee79527e0098afea147bffc33bf710d3/raw/coverage.json)
+[![Build Status](https://github.com/TheRealMattLear/php-mysql-shim/actions/workflows/phpunit.yaml/badge.svg)](https://github.com/TheRealMattLear/php-mysql-shim/actions/workflows/phpunit.yaml)
 
 <p align="center">
   <img width="500" height="500" src="https://github.com/user-attachments/assets/28526ddb-1748-46ba-a984-81bcc238274d">
 </p>
 
-# PHP 7 Shim for ext/mysql
+# PHP Shim for ext/mysql
 
-This library attempts to create a drop-in replacement for ext/mysql on PHP 7 using mysqli.
+This library attempts to create a drop-in replacement for ext/mysql on PHP 7 and PHP 8 using mysqli.
 
 For the most part, it should _just work_.
 
@@ -19,10 +18,10 @@ This library is meant to be a _stop-gap_. It will be slower than using the nativ
 
 ## Installation
 
-To install, either add `dshafik/php7-mysql-shim` to your `composer.json`:
+To install, either add `therealmattlear/php-mysql-shim` to your `composer.json`:
 
 ```sh
-$ composer require dshafik/php7-mysql-shim
+$ composer require therealmattlear/php-mysql-shim
 ```
 
 or, clone/download this repo, and include `lib/mysql.php` in your project.
@@ -31,7 +30,7 @@ or, clone/download this repo, and include `lib/mysql.php` in your project.
 
 When installed with composer, the library is included automatically. 
 
-Once the `lib/mysql.php` file is included, it will create `mysql_*` functions if they don't already exist. _**You may safely include the file in a PHP 5.3.6+ project**_, it will do nothing if the mysql extension is already available.
+Once the `lib/mysql.php` file is included, it will create `mysql_*` functions if they don't already exist. It supports PHP 7.0 through PHP 8.5.
 
 ## Caveats
 
